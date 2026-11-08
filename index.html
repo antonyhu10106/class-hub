@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr. Hsu 專屬家教與測驗系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+    <!-- 強制登入 Modal -->
+    <div id="auth-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-100">
+            <h2 class="text-xl font-bold text-slate-900 mb-2">系統登入 / 註冊</h2>
+            <p class="text-xs text-slate-500 mb-4">請輸入帳號密碼以進入專屬測驗系統。</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">電子信箱</label>
+                    <input type="email" id="email-input" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-600 outline-none" placeholder="your@email.com">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">密碼</label>
+                    <input type="password" id="password-input" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-600 outline-none" placeholder="••••••••">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="handleLogin()" class="flex-1 bg-slate-900 text-white text-sm font-medium py-2.5 rounded-xl">登入</button>
+                    <button onclick="handleSignUp()" class="flex-1 bg-slate-100 text-slate-700 text-sm font-medium py-2.5 rounded-xl">註冊</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主應用介面 -->
+    <div id="app-content" class="hidden max-w-md mx-auto px-4 py-6">
+        <header class="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <div>
+                <h1 class="font-bold text-sm" id="user-display-name">載入中...</h1>
+                <span class="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">已登入</span>
+            </div>
+            <button onclick="handleLogout()" class="text-xs text-rose-600 font-medium px-3 py-1.5 rounded-xl bg-rose-50">登出</button>
+        </header>
+
+        <main>
+            <h2 class="text-lg font-bold text-slate-900 mb-1">選擇你的班級</h2>
+            <p class="text-xs text-slate-500 mb-4">輸入班級密碼即可解鎖單元測驗。</p>
+            <div id="classes-list" class="space-y-3">
+                <!-- 動態載入班級 -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // 替換成你的 Supabase 金鑰
+        const SUPABASE_URL = '你的_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = '你的_SUPABASE_ANON_KEY';
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function checkUser() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                document.getElementById('auth-modal').classList.add('hidden');
+                document.getElementById('app-content').classList.remove('hidden');
+                document.getElementById('user-display-name').innerText = session.user.email;
+                loadClasses();
+            } else {
+                document.getElementById('auth-modal').classList.remove('hidden');
+                document.getElementById('app-content').classList.add('hidden');
+            }
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('email-input').value;
+            const password = document.getElementById('password-input').value;
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) alert('登入失敗: ' + error.message);
+            else checkUser();
+        }
+
+        async function handleSignUp() {
+            const email = document.getElementById('email-input').value;
+            const password = document.getElementById('password-input').value;
+            const { error } = await supabase.auth.signUp({ email, password });
+            if (error) alert('註冊失敗: ' + error.message);
+            else { alert('註冊成功！已自動登入。'); checkUser(); }
+        }
+
+        async function handleLogout() {
+            await supabase.auth.signOut();
+            checkUser();
+        }
+
+        async function loadClasses() {
+            const { data } = await supabase.from('classes').select('*');
+            const container = document.getElementById('classes-list');
+            container.innerHTML = '';
+            if (data && data.length > 0) {
+                data.forEach(cls => {
+                    container.innerHTML += `
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center">
+                            <div>
+                                <span class="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">${cls.category}</span>
+                                <h3 class="text-sm font-bold text-slate-900 mt-1">${cls.name}</h3>
+                            </div>
+                            <button onclick="unlockClass('${cls.id}', '${cls.password}')" class="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs font-medium">解鎖</button>
+                        </div>
+                    `;
+                });
+            } else {
+                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">目前尚無班級資料。</p>`;
+            }
+        }
+
+        function unlockClass(classId, correctPassword) {
+            const inputPwd = prompt('請輸入班級密碼：');
+            if (inputPwd === correctPassword) {
+                alert('解鎖成功！');
+            } else if (inputPwd !== null) {
+                alert('密碼錯誤！');
+            }
+        }
+
+        checkUser();
+    </script>
+</body>
+</html>
